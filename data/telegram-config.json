@@ -1,0 +1,13 @@
+{
+  "botToken": "9074455805:AAGTy7fz7PjXj6MOxYm95999funC4RzWtiA",
+  "chatId": "868120477",
+  "kassaNomi": "1-Kassa (Asosiy)",
+  "kassirIsmi": "𝟕𝟕𝟕",
+  "autoSendOnOpen": true,
+  "autoSendOnClose": true,
+  "autoSendOnTransaction": true,
+  "enabled": true,
+  "botUsername": "navokassabot",
+  "miniAppUrl": "https://ais-dev-3m2z33d4i57h5kzwvuikmh-3620319891.asia-east1.run.app",
+  "miniAppDisabled": false
+}

@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kassa va Kunlik Hisob-Kitob Dasturi</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Vue 3 CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <!-- Google Fonts (Inter) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .mono { font-family: 'JetBrains+Mono', monospace; }
+
+    /* Chop etish (Print) uchun maxsus uslublar */
+    @media print {
+      body * { visibility: hidden !important; }
+      #printable-receipt, #printable-receipt * { visibility: visible !important; }
+      #printable-receipt {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 80mm !important; /* Termo-printer uchun standart o'lcham */
+        margin: 0 auto;
+        padding: 10px;
+        background: white;
+        color: black;
+      }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+  <div id="app" class="max-w-6xl mx-auto p-4 md:p-6" v-cloak>
+
+    <!-- 1. HEADER (Boshqaruv paneli) -->
+    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 mb-6">
+      <div>
+        <div class="flex items-center gap-2">
+          <div class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+          <h1 class="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Kassa & Hisob-Kitob</h1>
+        </div>
+        <p class="text-xs md:text-sm text-slate-500 mt-0.5">Sana: {{ bugungiSana }} | Rejim: <span class="font-medium text-slate-700">Kunlik smena</span></p>
+      </div>
+
+      <div class="flex items-center gap-2.5">
+        <button @click="showReceiptModal = true" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-sm font-semibold transition flex items-center gap-2 shadow-sm">
+          <span>🧾</span> Z-Hisobot (Chek)
+        </button>
+        <button @click="resetKun" class="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-sm font-semibold transition border border-rose-200">
+          Tozalash
+        </button>
+      </div>
+    </header>
+
+    <!-- 2. TEZKOR MA'LUMOT KARTALARI (Summary Cards) -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+      <!-- Jami Savdo -->
+      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+        <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Jami Tushum (Kirim)</span>
+        <div class="text-lg md:text-2xl font-bold text-emerald-600 mono mt-1">{{ formatMoney(jamiSavdo) }}</div>
+        <div class="text-[11px] text-slate-400 mt-1">Naqd + Karta + Click</div>
+      </div>
+
+      <!-- Jami Chiqim -->
+      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+        <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Kassadan Chiqim</span>
+        <div class="text-lg md:text-2xl font-bold text-rose-600 mono mt-1">{{ formatMoney(jamiChiqim) }}</div>
+        <div class="text-[11px] text-slate-400 mt-1">Abed, qarz, firma va b.</div>
+      </div>
+
+      <!-- Kutilgan Naqd Pul -->
+      <div class="bg-white p-4 rounded-2xl border border-blue-200 shadow-sm bg-gradient-to-br from-blue-50/50 to-white">
+        <span class="text-xs font-semibold text-blue-700 uppercase tracking-wider">Kutilgan Naqd Pul</span>
+        <div class="text-lg md:text-2xl font-bold text-blue-900 mono mt-1">{{ formatMoney(kutilganNaqdPul) }}</div>
+        <div class="text-[11px] text-blue-600/80 mt-1">Sdacha + Naqd - Chiqim</div>
+      </div>
+
+      <!-- Raznitsa (Farq) -->
+      <div class="bg-white p-4 rounded-2xl border shadow-sm" :class="raznitsaHolati.borderClass">
+        <span class="text-xs font-semibold uppercase tracking-wider" :class="raznitsaHolati.textClass">Raznitsa (Farq)</span>
+        <div class="text-lg md:text-2xl font-bold mono mt-1" :class="raznitsaHolati.textClass">
+          {{ raznitsa >= 0 ? '+' : '' }}{{ formatMoney(raznitsa) }}
+        </div>
+        <div class="text-[11px] font-medium mt-1" :class="raznitsaHolati.badgeClass">{{ raznitsaHolati.message }}</div>
+      </div>
+    </div>
+
+    <!-- 3. ASOSIY ISH MAYDONI -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Chap qism: Kirim/Chiqim Kiritish Formasi (5 ustun) -->
+      <div class="lg:col-span-5 space-y-5">
+        
+        <!-- Boshlang'ich Sdacha qutisi -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+            1. Ertalabki Kassa (Boshlang'ich Sdacha)
+          </label>
+          <div class="relative">
+            <input 
+              type="number" 
+              v-model.number="boshlangichSdacha"
+              placeholder="0"
+              class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-base md:text-lg font-bold text-slate-800 mono focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition"
+            >
+            <span class="absolute right-4 top-3.5 text-xs text-slate-400 font-semibold">SO'M</span>
+          </div>
+        </div>
+
+        <!-- Yangi Amaliyot Kiritish -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3">2. Yangi Amaliyot Qo'shish</h2>
+          
+          <!-- Kirim / Chiqim tugmachalari -->
+          <div class="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl mb-4">
+            <button 
+              type="button"
+              @click="amaliyotTuri = 'kirim'; resetKategoriya()" 
+              class="py-2.5 rounded-lg text-sm font-bold transition flex items-center justify-center gap-1.5"
+              :class="amaliyotTuri === 'kirim' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'"
+            >
+              <span>+</span> Tushum (Kirim)
+            </button>
+            <button 
+              type="button"
+              @click="amaliyotTuri = 'chiqim'; resetKategoriya()" 
+              class="py-2.5 rounded-lg text-sm font-bold transition flex items-center justify-center gap-1.5"
+              :class="amaliyotTuri === 'chiqim' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'"
+            >
+              <span>-</span> Chiqim (Xarajat)
+            </button>
+          </div>
+
+          <!-- Kategoriya tanlash -->
+          <div class="mb-4">
+            <label class="block text-xs font-medium text-slate-600 mb-1.5">To'lov / Xarajat turi:</label>
+            <div class="grid grid-cols-2 sm:grid-cols-2 gap-2">
+              <template v-if="amaliyotTuri === 'kirim'">
+                <button 
+                  v-for="kat in kirimKategoriyalari" 
+                  :key="kat.id" 
+                  @click="tanlanganKategoriya = kat.id"
+                  type="button"
+                  class="py-2 px-3 text-xs md:text-sm font-semibold rounded-xl border text-left transition flex items-center justify-between"
+                  :class="tanlanganKategoriya === kat.id ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-slate-200 hover:bg-slate-50 text-slate-700'"
+                >
+                  <span>{{ kat.nomi }}</span>
+                  <span class="text-xs">{{ kat.icon }}</span>
+                </button>
+              </template>
+              
+              <template v-else>
+                <button 
+                  v-for="kat in chiqimKategoriyalari" 
+                  :key="kat.id" 
+                  @click="tanlanganKategoriya = kat.id"
+                  type="button"
+                  class="py-2 px-3 text-xs md:text-sm font-semibold rounded-xl border text-left transition flex items-center justify-between"
+                  :class="tanlanganKategoriya === kat.id ? 'border-rose-500 bg-rose-50 text-rose-800' : 'border-slate-200 hover:bg-slate-50 text-slate-700'"
+                >
+                  <span>{{ kat.nomi }}</span>
+                  <span class="text-xs">{{ kat.icon }}</span>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <!-- Summa -->
+          <div class="mb-3">
+            <label class="block text-xs font-medium text-slate-600 mb-1">Summa (so'm):</label>
+            <input 
+              type="number" 
+              v-model.number="yangiSumma" 
+              placeholder="Masalan: 50 000"
+              class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-base md:text-lg font-bold mono outline-none focus:ring-2 focus:bg-white transition"
+              :class="amaliyotTuri === 'kirim' ? 'focus:ring-emerald-500' : 'focus:ring-rose-500'"
+              @keyup.enter="qoshishAmaliyot"
+            >
+          </div>
+
+          <!-- Izoh / Tavsif -->
+          <div class="mb-4">
+            <label class="block text-xs font-medium text-slate-600 mb-1">Izoh (ixtiyoriy):</label>
+            <input 
+              type="text" 
+              v-model="yangiIzoh" 
+              placeholder="Masalan: Dilshod akaga qarz / Non ta'minotchi"
+              class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
+              @keyup.enter="qoshishAmaliyot"
+            >
+          </div>
+
+          <!-- Saqlash tugmasi -->
+          <button 
+            type="button" 
+            @click="qoshishAmaliyot"
+            class="w-full py-3.5 rounded-xl font-bold text-white transition flex items-center justify-center gap-2 shadow-sm text-sm md:text-base active:scale-[0.99]"
+            :class="amaliyotTuri === 'kirim' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'"
+          >
+            Qo'shish (Enter)
+          </button>
+        </div>
+
+        <!-- 3. Kassani Yopish (Faktik pul kiritish) -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+            3. Kassani Yopish: Sanalgan Haqiqiy Naqd Pul (Fakt)
+          </label>
+          <p class="text-xs text-slate-400 mb-2.5">Smena oxirida g'aladagi naqd pullarni sanab kiriting:</p>
+          <div class="relative">
+            <input 
+              type="number" 
+              v-model.number="faktikNaqdPul"
+              placeholder="Kassada sanalgan pul..."
+              class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-lg md:text-xl font-bold mono text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
+            >
+            <span class="absolute right-4 top-3.5 text-xs text-slate-400 font-semibold">SO'M</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- O'ng qism: Amaliyotlar Tarixi va Ro'yxati (7 ustun) -->
+      <div class="lg:col-span-7">
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col h-full min-h-[500px]">
+          
+          <div class="p-4 border-b border-slate-100 flex justify-between items-center">
+            <div>
+              <h2 class="font-bold text-slate-800">Kunlik Harakatlar Jurnali</h2>
+              <span class="text-xs text-slate-400">Jami {{ amaliyotlar.length }} ta amaliyot</span>
+            </div>
+            <!-- Filtrlash -->
+            <div class="flex gap-1 bg-slate-100 p-1 rounded-lg text-xs font-medium">
+              <button @click="filter = 'all'" :class="filter === 'all' ? 'bg-white shadow text-slate-800' : 'text-slate-500'" class="px-2.5 py-1 rounded-md">Barchasi</button>
+              <button @click="filter = 'kirim'" :class="filter === 'kirim' ? 'bg-white shadow text-emerald-700' : 'text-slate-500'" class="px-2.5 py-1 rounded-md">Tushumlar</button>
+              <button @click="filter = 'chiqim'" :class="filter === 'chiqim' ? 'bg-white shadow text-rose-700' : 'text-slate-500'" class="px-2.5 py-1 rounded-md">Xarajatlar</button>
+            </div>
+          </div>
+
+          <!-- Ro'yxat -->
+          <div class="divide-y divide-slate-100 overflow-y-auto flex-1 max-h-[620px]">
+            <div v-if="saralanganAmaliyotlar.length === 0" class="p-12 text-center text-slate-400">
+              <div class="text-3xl mb-2">📋</div>
+              Hozircha hech qanday amaliyot kiritilmadi.
+            </div>
+
+            <div 
+              v-for="item in saralanganAmaliyotlar" 
+              :key="item.id"
+              class="p-3.5 px-4 flex items-center justify-between hover:bg-slate-50/80 transition"
+            >
+              <div class="flex items-center gap-3">
+                <div 
+                  class="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0"
+                  :class="item.turi === 'kirim' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100'"
+                >
+                  {{ item.turi === 'kirim' ? '↓' : '↑' }}
+                </div>
+                <div>
+                  <div class="font-semibold text-slate-800 text-sm flex items-center gap-2">
+                    {{ item.kategoriyaNomi }}
+                    <span v-if="item.izoh" class="text-xs font-normal text-slate-500">({{ item.izoh }})</span>
+                  </div>
+                  <div class="text-[11px] text-slate-400">{{ item.vaqt }}</div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-3">
+                <span 
+                  class="font-bold mono text-sm md:text-base"
+                  :class="item.turi === 'kirim' ? 'text-emerald-600' : 'text-rose-600'"
+                >
+                  {{ item.turi === 'kirim' ? '+' : '-' }}{{ formatMoney(item.summa) }}
+                </span>
+                <button 
+                  @click="ochirishAmaliyot(item.id)" 
+                  class="text-slate-300 hover:text-rose-500 p-1.5 rounded-lg transition"
+                  title="O'chirish"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pastki hisob paneli -->
+          <div class="p-4 bg-slate-50/80 border-t border-slate-100 rounded-b-2xl grid grid-cols-3 gap-2 text-center text-xs">
+            <div>
+              <span class="text-slate-500 block">Naqd Tushum:</span>
+              <strong class="text-slate-700 mono">{{ formatMoney(naqdSavdo) }}</strong>
+            </div>
+            <div>
+              <span class="text-slate-500 block">Karta (Terminal):</span>
+              <strong class="text-slate-700 mono">{{ formatMoney(terminalSavdo) }}</strong>
+            </div>
+            <div>
+              <span class="text-slate-500 block">Click / Payme:</span>
+              <strong class="text-slate-700 mono">{{ formatMoney(clickSavdo) }}</strong>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 4. Z-HISOBOT VA PRINT MODAL (Chek ko'rinishi) -->
+    <div v-if="showReceiptModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        
+        <!-- Modal tepasi -->
+        <div class="p-4 border-b flex justify-between items-center bg-slate-50">
+          <h3 class="font-bold text-slate-800 text-sm">Z-Hisobot (Chek Ko'rinishi)</h3>
+          <button @click="showReceiptModal = false" class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+        </div>
+
+        <!-- Bosib chiqariladigan kvitansiya qismi -->
+        <div id="printable-receipt" class="p-6 overflow-y-auto text-xs mono text-slate-800 space-y-4">
+          <div class="text-center border-b border-dashed border-slate-300 pb-3">
+            <h2 class="font-bold text-base uppercase tracking-wider text-black">MINI-MARKET KASSA</h2>
+            <p class="text-[10px] text-slate-500 mt-0.5">Smena yakuniy Z-Hisoboti</p>
+            <p class="text-[10px] text-slate-500">Sana: {{ bugungiSana }} | {{ hozirgiVaqt }}</p>
+          </div>
+
+          <!-- Kirimlar bo'limi -->
+          <div>
+            <div class="font-bold uppercase text-[11px] mb-1.5 border-b pb-0.5">1. Kirimlar (Savdo)</div>
+            <div class="flex justify-between py-0.5">
+              <span>Naqd savdo:</span>
+              <span>{{ formatMoney(naqdSavdo) }} so'm</span>
+            </div>
+            <div class="flex justify-between py-0.5">
+              <span>Terminal (Karta):</span>
+              <span>{{ formatMoney(terminalSavdo) }} so'm</span>
+            </div>
+            <div class="flex justify-between py-0.5">
+              <span>Click / Payme:</span>
+              <span>{{ formatMoney(clickSavdo) }} so'm</span>
+            </div>
+            <div class="flex justify-between font-bold border-t border-slate-200 mt-1 pt-1">
+              <span>Jami Savdo:</span>
+              <span>{{ formatMoney(jamiSavdo) }} so'm</span>
+            </div>
+          </div>
+
+          <!-- Chiqimlar bo'limi -->
+          <div>
+            <div class="font-bold uppercase text-[11px] mb-1.5 border-b pb-0.5">2. Chiqimlar (Xarajatlar)</div>
+            <div class="flex justify-between py-0.5">
+              <span>Tushlik (Abed):</span>
+              <span>{{ formatMoney(abedChiqim) }} so'm</span>
+            </div>
+            <div class="flex justify-between py-0.5">
+              <span>Qarzga berildi:</span>
+              <span>{{ formatMoney(qarzChiqim) }} so'm</span>
+            </div>
+            <div class="flex justify-between py-0.5">
+              <span>Firmaga berildi:</span>
+              <span>{{ formatMoney(firmaChiqim) }} so'm</span>
+            </div>
+            <div class="flex justify-between py-0.5">
+              <span>Boshqa xarajatlar:</span>
+              <span>{{ formatMoney(boshqaChiqim) }} so'm</span>
+            </div>
+            <div class="flex justify-between font-bold border-t border-slate-200 mt-1 pt-1 text-rose-600">
+              <span>Jami Chiqim:</span>
+              <span>-{{ formatMoney(jamiChiqim) }} so'm</span>
+            </div>
+          </div>
+
+          <!-- Kassa solishtiruvi (Raznitsa) -->
+          <div class="bg-slate-50 p-2.5 rounded-lg border border-dashed border-slate-300 space-y-1">
+            <div class="flex justify-between">
+              <span>Boshlang'ich Sdacha:</span>
+              <span>{{ formatMoney(boshlangichSdacha) }} so'm</span>
+            </div>
+            <div class="flex justify-between">
+              <span>Kutilgan Naqd Pul:</span>
+              <span class="font-bold">{{ formatMoney(kutilganNaqdPul) }} so'm</span>
+            </div>
+            <div class="flex justify-between border-t border-slate-200 pt-1">
+              <span>Faktik (Sanalgan):</span>
+              <span class="font-bold">{{ formatMoney(faktikNaqdPul) }} so'm</span>
+            </div>
+            <div class="flex justify-between font-bold text-sm pt-1 border-t border-slate-300" :class="raznitsaHolati.textClass">
+              <span>RAZNITSA (FARQ):</span>
+              <span>{{ raznitsa >= 0 ? '+' : '' }}{{ formatMoney(raznitsa) }} so'm</span>
+            </div>
+          </div>
+
+          <div class="text-center text-[10px] text-slate-400 border-t border-dashed border-slate-300 pt-3">
+            Kassir: ___________________ (imzo)<br>
+            Dastur orqali chop etildi
+          </div>
+        </div>
+
+        <!-- Modal tugmalari -->
+        <div class="p-4 border-t bg-slate-50 flex gap-2 no-print">
+          <button @click="printReceipt" class="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition flex items-center justify-center gap-2">
+            🖨️ Chop etish (Print)
+          </button>
+          <button @click="showReceiptModal = false" class="px-4 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-semibold text-sm transition">
+            Yopish
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const { createApp, ref, computed, watch, onMounted } = Vue;
+
+    createApp({
+      setup() {
+        // Asosiy reaktiv ma'lumotlar
+        const boshlangichSdacha = ref(0);
+        const faktikNaqdPul = ref(0);
+        const amaliyotTuri = ref('kirim'); // 'kirim' yoki 'chiqim'
+        const tanlanganKategoriya = ref('naqd');
+        const yangiSumma = ref(null);
+        const yangiIzoh = ref('');
+        const filter = ref('all');
+        const showReceiptModal = ref(false);
+
+        // Amaliyotlar ro'yxati
+        const amaliyotlar = ref([]);
+
+        // Kategoriyalar
+        const kirimKategoriyalari = [
+          { id: 'naqd', nomi: 'Naqd Pul', icon: '💵' },
+          { id: 'terminal', nomi: 'Terminal (Karta)', icon: '💳' },
+          { id: 'click', nomi: 'Click / Payme', icon: '📱' }
+        ];
+
+        const chiqimKategoriyalari = [
+          { id: 'abed', nomi: 'Tushlik (Abed)', icon: '🍲' },
+          { id: 'qarz', nomi: 'Qarzga berildi', icon: '📝' },
+          { id: 'firma', nomi: 'Ta\'minotchi (Firma)', icon: '🚚' },
+          { id: 'boshqa', nomi: 'Boshqa xarajat', icon: '📦' }
+        ];
+
+        const resetKategoriya = () => {
+          tanlanganKategoriya.value = amaliyotTuri.value === 'kirim' ? 'naqd' : 'abed';
+        };
+
+        // Hisob-kitoblar (Computed Properties)
+        const naqdSavdo = computed(() => {
+          return amaliyotlar.value
+            .filter(i => i.turi === 'kirim' && i.kategoriyaId === 'naqd')
+            .reduce((sum, item) => sum + item.summa, 0);
+        });
+
+        const terminalSavdo = computed(() => {
+          return amaliyotlar.value
+            .filter(i => i.turi === 'kirim' && i.kategoriyaId === 'terminal')
+            .reduce((sum, item) => sum + item.summa, 0);
+        });
+
+        const clickSavdo = computed(() => {
+          return amaliyotlar.value
+            .filter(i => i.turi === 'kirim' && i.kategoriyaId === 'click')
+            .reduce((sum, item) => sum + item.summa, 0);
+        });
+
+        const jamiSavdo = computed(() => naqdSavdo.value + terminalSavdo.value + clickSavdo.value);
+
+        // Chiqim turlari bo'yicha
+        const abedChiqim = computed(() => {
+          return amaliyotlar.value
+            .filter(i => i.turi === 'chiqim' && i.kategoriyaId === 'abed')
+            .reduce((sum, item) => sum + item.summa, 0);
+        });
+
+        const qarzChiqim = computed(() => {
+          return amaliyotlar.value
+            .filter(i => i.turi === 'chiqim' && i.kategoriyaId === 'qarz')
+            .reduce((sum, item) => sum + item.summa, 0);
+        });
+
+        const firmaChiqim = computed(() => {
+          return amaliyotlar.value
+            .filter(i => i.turi === 'chiqim' && i.kategoriyaId === 'firma')
+            .reduce((sum, item) => sum + item.summa, 0);
+        });
+
+        const boshqaChiqim = computed(() => {
+          return amaliyotlar.value
+            .filter(i => i.turi === 'chiqim' && i.kategoriyaId === 'boshqa')
+            .reduce((sum, item) => sum + item.summa, 0);
+        });
+
+        const jamiChiqim = computed(() => abedChiqim.value + qarzChiqim.value + firmaChiqim.value + boshqaChiqim.value);
+
+        // 3-Mantiq: Kassa kutilgan puli va Raznitsa
+        // Formula: Kutilgan Naqd Pul = Sdacha + Naqd savdo - Barcha naqd chiqimlar
+        const kutilganNaqdPul = computed(() => {
+          const sdacha = Number(boshlangichSdacha.value) || 0;
+          return sdacha + naqdSavdo.value - jamiChiqim.value;
+        });
+
+        const raznitsa = computed(() => {
+          const fakt = Number(faktikNaqdPul.value) || 0;
+          return fakt - kutilganNaqdPul.value;
+        });
+
+        // Raznitsa holati vizual bezagi
+        const raznitsaHolati = computed(() => {
+          const diff = raznitsa.value;
+          if (diff === 0) {
+            return {
+              textClass: 'text-emerald-600',
+              borderClass: 'border-emerald-200 bg-emerald-50/40',
+              badgeClass: 'text-emerald-700 bg-emerald-100/60 inline-block px-2 py-0.5 rounded',
+              message: '✓ Kassa to\'g\'ri (Farq yo\'q)'
+            };
+          } else if (diff < 0) {
+            return {
+              textClass: 'text-rose-600',
+              borderClass: 'border-rose-300 bg-rose-50/40',
+              badgeClass: 'text-rose-700 bg-rose-100/60 inline-block px-2 py-0.5 rounded',
+              message: '⚠ Kamomad (Pul yetishmayapti)'
+            };
+          } else {
+            return {
+              textClass: 'text-indigo-600',
+              borderClass: 'border-indigo-200 bg-indigo-50/40',
+              badgeClass: 'text-indigo-700 bg-indigo-100/60 inline-block px-2 py-0.5 rounded',
+              message: '▲ Ortiqcha pul kiritilgan'
+            };
+          }
+        });
+
+        // Yangi amaliyot qo'shish funksiyasi
+        const qoshishAmaliyot = () => {
+          if (!yangiSumma.value || yangiSumma.value <= 0) {
+            alert('Iltimos, noldan katta summa kiriting!');
+            return;
+          }
+
+          let kategoriyaNomi = '';
+          if (amaliyotTuri.value === 'kirim') {
+            const topildi = kirimKategoriyalari.find(k => k.id === tanlanganKategoriya.value);
+            kategoriyaNomi = topildi ? topildi.nomi : 'Boshqa';
+          } else {
+            const topildi = chiqimKategoriyalari.find(k => k.id === tanlanganKategoriya.value);
+            kategoriyaNomi = topildi ? topildi.nomi : 'Boshqa';
+          }
+
+          const yangiItem = {
+            id: Date.now(),
+            turi: amaliyotTuri.value,
+            kategoriyaId: tanlanganKategoriya.value,
+            kategoriyaNomi: kategoriyaNomi,
+            summa: Number(yangiSumma.value),
+            izoh: yangiIzoh.value.trim(),
+            vaqt: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })
+          };
+
+          amaliyotlar.value.unshift(yangiItem);
+
+          // Maydonlarni tozalash
+          yangiSumma.value = null;
+          yangiIzoh.value = '';
+          saqlash();
+        };
+
+        const ochirishAmaliyot = (id) => {
+          if (confirm('Ushbu yozuvni o\'chirmoqchimisiz?')) {
+            amaliyotlar.value = amaliyotlar.value.filter(item => item.id !== id);
+            saqlash();
+          }
+        };
+
+        const saralanganAmaliyotlar = computed(() => {
+          if (filter.value === 'kirim') return amaliyotlar.value.filter(i => i.turi === 'kirim');
+          if (filter.value === 'chiqim') return amaliyotlar.value.filter(i => i.turi === 'chiqim');
+          return amaliyotlar.value;
+        });
+
+        // Yordamchi formatlash funksiyalari
+        const formatMoney = (val) => {
+          if (val === null || val === undefined) return '0';
+          return Number(val).toLocaleString('uz-UZ');
+        };
+
+        const bugungiSana = new Date().toLocaleDateString('uz-UZ', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+
+        const hozirgiVaqt = new Date().toLocaleTimeString('uz-UZ', {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+
+        // Chop etish funksiyasi
+        const printReceipt = () => {
+          window.print();
+        };
+
+        // Yangi kunga tozalash
+        const resetKun = () => {
+          if (confirm('Bugungi smenani yakunlab barcha yozuvlarni tozalashni tasdiqlaysizmi?')) {
+            localStorage.removeItem('kassa_data');
+            amaliyotlar.value = [];
+            boshlangichSdacha.value = 0;
+            faktikNaqdPul.value = 0;
+          }
+        };
+
+        // LocalStorage orqali saqlash (sahifa yangilanganda o'chib ketmasligi uchun)
+        const saqlash = () => {
+          const malumot = {
+            boshlangichSdacha: boshlangichSdacha.value,
+            faktikNaqdPul: faktikNaqdPul.value,
+            amaliyotlar: amaliyotlar.value
+          };
+          localStorage.setItem('kassa_data', JSON.stringify(malumot));
+        };
+
+        // O'zgarishlarni kuzatib saqlash
+        watch([boshlangichSdacha, faktikNaqdPul], saqlash);
+
+        onMounted(() => {
+          const saved = localStorage.getItem('kassa_data');
+          if (saved) {
+            try {
+              const parsed = JSON.parse(saved);
+              boshlangichSdacha.value = parsed.boshlangichSdacha || 0;
+              faktikNaqdPul.value = parsed.faktikNaqdPul || 0;
+              amaliyotlar.value = parsed.amaliyotlar || [];
+            } catch (e) {
+              console.error('Ma\'lumot yuklashda xatolik:', e);
+            }
+          }
+        });
+
+        return {
+          boshlangichSdacha,
+          faktikNaqdPul,
+          amaliyotTuri,
+          tanlanganKategoriya,
+          yangiSumma,
+          yangiIzoh,
+          amaliyotlar,
+          kirimKategoriyalari,
+          chiqimKategoriyalari,
+          resetKategoriya,
+          qoshishAmaliyot,
+          ochirishAmaliyot,
+          filter,
+          saralanganAmaliyotlar,
+          naqdSavdo,
+          terminalSavdo,
+          clickSavdo,
+          jamiSavdo,
+          abedChiqim,
+          qarzChiqim,
+          firmaChiqim,
+          boshqaChiqim,
+          jamiChiqim,
+          kutilganNaqdPul,
+          raznitsa,
+          raznitsaHolati,
+          formatMoney,
+          bugungiSana,
+          hozirgiVaqt,
+          showReceiptModal,
+          printReceipt,
+          resetKun
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

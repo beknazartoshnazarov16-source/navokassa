@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="112" fill="#059669"/>
+  <rect x="28" y="28" width="456" height="456" rx="92" fill="url(#bgGrad)"/>
+  <!-- Storefront / Kassa roof -->
+  <path d="M126 178L152 126H360L386 178H126Z" fill="#ECFDF5"/>
+  <path d="M126 178C126 196.778 141.222 212 160 212C178.778 212 194 196.778 194 178C194 196.778 209.222 212 228 212C246.778 212 262 196.778 262 178C262 196.778 277.222 212 296 212C314.778 212 330 196.778 330 178C330 196.778 345.222 212 364 212C378.5 212 386 200 386 178H126Z" fill="#A7F3D0"/>
+  <!-- Register body -->
+  <rect x="142" y="218" width="228" height="162" rx="26" fill="#FFFFFF"/>
+  <!-- Screen / Display -->
+  <rect x="166" y="242" width="180" height="54" rx="12" fill="#064E3B"/>
+  <!-- Check / Balance indicator inside display -->
+  <path d="M190 269H274" stroke="#34D399" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="318" cy="269" r="10" fill="#10B981"/>
+  <!-- Keypad & Drawer -->
+  <rect x="166" y="314" width="48" height="20" rx="6" fill="#D1FAE5"/>
+  <rect x="232" y="314" width="48" height="20" rx="6" fill="#D1FAE5"/>
+  <rect x="298" y="314" width="48" height="20" rx="6" fill="#10B981"/>
+  <rect x="166" y="346" width="180" height="14" rx="7" fill="#A7F3D0"/>
+  <defs>
+    <linearGradient id="bgGrad" x1="28" y1="28" x2="484" y2="484" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10B981"/>
+      <stop offset="1" stop-color="#047857"/>
+    </linearGradient>
+  </defs>
+</svg>

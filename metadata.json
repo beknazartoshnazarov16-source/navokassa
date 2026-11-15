@@ -1,0 +1,6 @@
+{
+  "name": "Navo Market Kassa",
+  "description": "Navo Market do'koni uchun kunlik kassa, savdo, naqd pul, Click, firma to'lovlari va xarajatlar hisob-kitob dasturi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
