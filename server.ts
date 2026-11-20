@@ -8,7 +8,7 @@ import {
   writeTgConfigToDisk,
   readCashiersFromDisk,
   writeCashiersToDisk,
-} from './server/storage';
+} from './server/storage.ts';
 import {
   escapeHtml,
   tgSend,
@@ -18,7 +18,7 @@ import {
   getRecentDetectedChat,
   resetWebhookCacheForConfigUpdate,
   isPublicMiniAppUrl,
-} from './server/telegramBot';
+} from './server/telegramBot.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

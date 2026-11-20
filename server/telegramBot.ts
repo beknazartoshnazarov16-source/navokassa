@@ -9,7 +9,7 @@ import {
   writeLastPollUpdateId,
   readBotSessionsFromDisk,
   writeBotSessionsToDisk,
-} from './storage';
+} from './storage.ts';
 
 // ==========================================
 // TELEGRAM BOT ENGINE (LONG-POLLING, PERSISTENT SESSIONS, HTML-SAFE)
