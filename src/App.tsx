@@ -177,15 +177,22 @@ export default function App() {
       }
 
       if (mounted && serverTg && serverTg.botToken) {
+        const hasLocalTg = Boolean(localStorage.getItem('navo_market_telegram_config'));
         setTelegramConfig(prev => {
-          const merged = {
-            ...serverTg,
-            ...prev,
-            botToken: prev.botToken || serverTg.botToken,
-            chatId: prev.chatId || serverTg.chatId,
-            enabled: Boolean((prev.botToken || serverTg.botToken) && (prev.chatId || serverTg.chatId)),
-            miniAppUrl: serverTg.miniAppUrl ?? prev.miniAppUrl
-          };
+          const merged = hasLocalTg
+            ? {
+                ...serverTg,
+                ...prev,
+                botToken: prev.botToken || serverTg.botToken,
+                chatId: prev.chatId || serverTg.chatId,
+                enabled: Boolean((prev.botToken || serverTg.botToken) && (prev.chatId || serverTg.chatId)),
+                miniAppUrl: serverTg.miniAppUrl ?? prev.miniAppUrl
+              }
+            : {
+                ...serverTg,
+                enabled: Boolean(serverTg.botToken && serverTg.chatId),
+              };
+          localStorage.setItem('navo_market_telegram_config', JSON.stringify(merged));
           return merged;
         });
       }
@@ -321,6 +328,10 @@ export default function App() {
 
   // Explicit Save Button
   const handleExplicitSave = async () => {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
     setSaveStatus('saving');
     const updated: KassaDayRecord = {
       ...currentRecord,
@@ -508,13 +519,23 @@ export default function App() {
 
   // Open Shift & Notify Telegram
   const handleOpenShift = async () => {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
     const vaqt = getCurrentTime();
     const updated: KassaDayRecord = {
       ...currentRecord,
       isOchiq: true,
-      ochilganVaqt: vaqt
+      ochilganVaqt: vaqt,
+      updatedAt: new Date().toISOString()
     };
-    updateCurrentRecord(updated);
+    setRecords(prev => {
+      const exists = prev.some(r => r.id === updated.id);
+      const next = exists ? prev.map(r => (r.id === updated.id ? updated : r)) : [updated, ...prev];
+      saveLocalRecords(next);
+      return next;
+    });
     await saveRecordToServer(updated);
 
     if (telegramConfig.enabled && telegramConfig.autoSendOnOpen) {
@@ -545,6 +566,10 @@ export default function App() {
 
   // Close Shift & Send Z-Report to Telegram
   const handleCloseShiftAndSend = async () => {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
     const vaqt = getCurrentTime();
     const updated: KassaDayRecord = {
       ...currentRecord,
@@ -552,7 +577,12 @@ export default function App() {
       yopilganVaqt: vaqt,
       updatedAt: new Date().toISOString()
     };
-    updateCurrentRecord(updated);
+    setRecords(prev => {
+      const exists = prev.some(r => r.id === updated.id);
+      const next = exists ? prev.map(r => (r.id === updated.id ? updated : r)) : [updated, ...prev];
+      saveLocalRecords(next);
+      return next;
+    });
     await saveRecordToServer(updated);
 
     if (telegramConfig.enabled) {
@@ -728,7 +758,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col">
       {/* Toast Notification */}
       {toast && (
-        <div className={`fixed bottom-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl border text-xs font-bold max-w-sm ${
+        <div className={`fixed bottom-4 left-4 right-4 sm:left-auto sm:right-5 sm:bottom-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl border text-xs font-bold sm:max-w-sm ${
           toast.type === 'error'
             ? 'bg-rose-900 text-white border-rose-700'
             : toast.type === 'info'
@@ -926,7 +956,13 @@ export default function App() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => updateCurrentRecord({ isOchiq: true })}
+                    onClick={() => {
+                      updateCurrentRecord({
+                        isOchiq: true,
+                        ochilganVaqt: currentRecord.ochilganVaqt || getCurrentTime()
+                      });
+                      showToast(`${selectedRegister} qayta ochildi`, 'info');
+                    }}
                     className="px-3 py-1 text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-lg flex items-center gap-1 cursor-pointer transition"
                   >
                     <Lock className="w-3.5 h-3.5" />
@@ -976,6 +1012,7 @@ export default function App() {
                 <div className="relative">
                   <input
                     type="number"
+                      inputMode="numeric"
                     min="0"
                     value={currentRecord.naqdPul || ''}
                     placeholder="0"
@@ -1000,6 +1037,7 @@ export default function App() {
                       <span className="text-slate-600 font-semibold">Ertalabki sdacha:</span>
                       <input
                         type="number"
+                      inputMode="numeric"
                         min="0"
                         value={currentRecord.ertalabkiSdacha || ''}
                         placeholder="0"
@@ -1027,6 +1065,7 @@ export default function App() {
                   <div className="relative mb-3">
                     <input
                       type="number"
+                      inputMode="numeric"
                       min="0"
                       value={currentRecord.terminalSumma || ''}
                       placeholder="0"
@@ -1070,6 +1109,7 @@ export default function App() {
                   />
                   <input
                     type="number"
+                      inputMode="numeric"
                     min="1"
                     placeholder="Qo'shiladigan summa..."
                     value={terminalAddSum}
@@ -1100,6 +1140,7 @@ export default function App() {
                   <div className="relative mb-3">
                     <input
                       type="number"
+                      inputMode="numeric"
                       min="0"
                       value={currentRecord.clickSumma || ''}
                       placeholder="0"
@@ -1142,6 +1183,7 @@ export default function App() {
                   />
                   <input
                     type="number"
+                      inputMode="numeric"
                     min="1"
                     placeholder="Click summasi..."
                     value={clickAddSum}
@@ -1178,6 +1220,7 @@ export default function App() {
                   />
                   <input
                     type="number"
+                      inputMode="numeric"
                     required
                     min="1"
                     placeholder="Summa (so'm)..."
@@ -1241,6 +1284,7 @@ export default function App() {
                   />
                   <input
                     type="number"
+                      inputMode="numeric"
                     required
                     min="1"
                     placeholder="Summa (so'm)..."
@@ -1304,6 +1348,7 @@ export default function App() {
                   />
                   <input
                     type="number"
+                      inputMode="numeric"
                     required
                     min="1"
                     placeholder="Summa (so'm)..."
@@ -1414,6 +1459,7 @@ export default function App() {
                   <div className="relative">
                     <input
                       type="number"
+                      inputMode="numeric"
                       min="0"
                       value={currentRecord.chekdagiSumma || ''}
                       placeholder="Chekdagi umumiy summani yozing..."
@@ -1528,6 +1574,7 @@ export default function App() {
         ) : (
           <ArchiveSearchView
             records={records}
+            cashiers={cashiers}
             onOpenRecord={r => {
               setSelectedDate(r.date);
               if (!registers.includes(r.kassaNomi)) {

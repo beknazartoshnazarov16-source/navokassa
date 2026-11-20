@@ -27,11 +27,28 @@ export const DEFAULT_TG_CONFIG: TelegramConfig = {
   enabled: false
 };
 
+export function isPublicMiniAppUrl(rawUrl: string): boolean {
+  const url = String(rawUrl || '').trim();
+  if (!url.startsWith('https://')) return false;
+  const lower = url.toLowerCase();
+  return !(
+    lower.includes('ais-dev-') ||
+    lower.includes('ais-pre-') ||
+    lower.includes('ai.studio/') ||
+    lower.includes('aistudio.google.com/') ||
+    lower.includes('localhost') ||
+    lower.includes('127.0.0.1') ||
+    lower.includes('0.0.0.0')
+  );
+}
+
 export function loadTelegramConfig(): TelegramConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_TG);
     if (raw) {
-      return { ...DEFAULT_TG_CONFIG, ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw);
+      const cleanUrl = parsed?.miniAppUrl && isPublicMiniAppUrl(parsed.miniAppUrl) ? parsed.miniAppUrl : '';
+      return { ...DEFAULT_TG_CONFIG, ...parsed, miniAppUrl: cleanUrl };
     }
   } catch (e) {
     console.error('Telegram sozlamasini yuklashda xatolik:', e);
@@ -41,12 +58,14 @@ export function loadTelegramConfig(): TelegramConfig {
 
 export function saveTelegramConfig(config: TelegramConfig): void {
   try {
-    localStorage.setItem(STORAGE_KEY_TG, JSON.stringify(config));
+    const cleanUrl = config.miniAppUrl && isPublicMiniAppUrl(config.miniAppUrl) ? config.miniAppUrl.trim() : '';
+    const sanitized = { ...config, miniAppUrl: cleanUrl };
+    localStorage.setItem(STORAGE_KEY_TG, JSON.stringify(sanitized));
     // Also persist on server silently
     fetch('/api/telegram-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
+      body: JSON.stringify(sanitized),
     }).catch(() => {});
   } catch (e) {
     console.error('Telegram sozlamasini saqlashda xatolik:', e);
@@ -59,10 +78,11 @@ export async function fetchTelegramConfigFromServer(): Promise<TelegramConfig | 
     if (!res.ok) return null;
     const data = await res.json();
     if (data.ok && data.config) {
+      const rawUrl = data.config.miniAppUrl || (!data.config.miniAppDisabled ? data.appUrl || '' : '');
       return {
         ...DEFAULT_TG_CONFIG,
         ...data.config,
-        miniAppUrl: data.config.miniAppUrl || (!data.config.miniAppDisabled ? data.appUrl || '' : ''),
+        miniAppUrl: isPublicMiniAppUrl(rawUrl) ? rawUrl : '',
       };
     }
   } catch {}
@@ -74,7 +94,8 @@ export async function fetchServerAppUrl(): Promise<string> {
     const res = await fetch('/api/telegram-config');
     if (!res.ok) return '';
     const data = await res.json();
-    return String(data.appUrl || '').trim();
+    const url = String(data.appUrl || '').trim();
+    return isPublicMiniAppUrl(url) ? url : '';
   } catch {
     return '';
   }
@@ -245,6 +266,13 @@ export async function sendTelegramMessage(
   }
 }
 
+function escapeTgHtml(val: unknown): string {
+  return String(val ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 export function formatKassaOchishMessage(params: {
   kassaNomi: string;
   kassirIsmi: string;
@@ -255,10 +283,10 @@ export function formatKassaOchishMessage(params: {
   const sdachaFmt = Number(params.ertalabkiSdacha).toLocaleString('uz-UZ');
   return `🟢 <b>[NAVO MARKET — KASSA OCHILDI]</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `🏪 <b>Kassa:</b> ${params.kassaNomi}\n` +
-    `👤 <b>Kassir:</b> ${params.kassirIsmi || '-'}\n` +
-    `📅 <b>Sana:</b> ${params.sana}\n` +
-    `⏰ <b>Ochilgan vaqt:</b> ${params.vaqt}\n` +
+    `🏪 <b>Kassa:</b> ${escapeTgHtml(params.kassaNomi)}\n` +
+    `👤 <b>Kassir:</b> ${escapeTgHtml(params.kassirIsmi || '-')}\n` +
+    `📅 <b>Sana:</b> ${escapeTgHtml(params.sana)}\n` +
+    `⏰ <b>Ochilgan vaqt:</b> ${escapeTgHtml(params.vaqt)}\n` +
     (params.ertalabkiSdacha > 0 ? `\n💵 <b>Ertalabki Sdacha:</b> <code>${sdachaFmt} so'm</code>\n` : '') +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `✅ Smena boshlandi!`;
@@ -339,11 +367,11 @@ export function formatNewCashierHtml(params: {
 }): string {
   return `👤 <b>[YANGI KASSIR RO'YXATDAN O'TDI]</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `🏷 <b>Ismi:</b> ${params.ism}\n` +
-    (params.asosiyKassa ? `🏪 <b>Kassa:</b> ${params.asosiyKassa}\n` : '') +
-    (params.telefon ? `📞 <b>Telefon:</b> ${params.telefon}\n` : '') +
-    (params.telegramUsername ? `📱 <b>Telegram:</b> @${params.telegramUsername}\n` : '') +
-    `⏰ <b>Vaqt:</b> ${params.vaqt}\n` +
+    `🏷 <b>Ismi:</b> ${escapeTgHtml(params.ism)}\n` +
+    (params.asosiyKassa ? `🏪 <b>Kassa:</b> ${escapeTgHtml(params.asosiyKassa)}\n` : '') +
+    (params.telefon ? `📞 <b>Telefon:</b> ${escapeTgHtml(params.telefon)}\n` : '') +
+    (params.telegramUsername ? `📱 <b>Telegram:</b> @${escapeTgHtml(params.telegramUsername)}\n` : '') +
+    `⏰ <b>Vaqt:</b> ${escapeTgHtml(params.vaqt)}\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `✅ Kassir tizimga kirdi.`;
 }
@@ -368,30 +396,30 @@ export function formatKassaYopishHtml(
   let qarzDetails = '';
   if (record.qarzList.length > 0) {
     qarzDetails = record.qarzList
-      .map((q, idx) => `   ${idx + 1}. ${q.nomi}: <code>${f(q.summa)} so'm</code>`)
+      .map((q, idx) => `   ${idx + 1}. ${escapeTgHtml(q.nomi)}: <code>${f(q.summa)} so'm</code>`)
       .join('\n') + '\n';
   }
 
   let firmaDetails = '';
   if (record.firmaList.length > 0) {
     firmaDetails = record.firmaList
-      .map((fp, idx) => `   ${idx + 1}. ${fp.nomi}: <code>${f(fp.summa)} so'm</code>`)
+      .map((fp, idx) => `   ${idx + 1}. ${escapeTgHtml(fp.nomi)}: <code>${f(fp.summa)} so'm</code>`)
       .join('\n') + '\n';
   }
 
   let rasxodDetails = '';
   if (record.rasxodList.length > 0) {
     rasxodDetails = record.rasxodList
-      .map((r, idx) => `   ${idx + 1}. ${r.nomi}: <code>${f(r.summa)} so'm</code>`)
+      .map((r, idx) => `   ${idx + 1}. ${escapeTgHtml(r.nomi)}: <code>${f(r.summa)} so'm</code>`)
       .join('\n') + '\n';
   }
 
   return `🔒 <b>[NAVO MARKET — KASSA HISOBOTI]</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `🏪 <b>Kassa:</b> ${record.kassaNomi}\n` +
-    `👤 <b>Kassir:</b> ${record.kassirIsmi || '-'}\n` +
-    `📅 <b>Sana:</b> ${formattedDate}\n` +
-    `⏰ <b>Vaqt:</b> ${vaqt}\n\n` +
+    `🏪 <b>Kassa:</b> ${escapeTgHtml(record.kassaNomi)}\n` +
+    `👤 <b>Kassir:</b> ${escapeTgHtml(record.kassirIsmi || '-')}\n` +
+    `📅 <b>Sana:</b> ${escapeTgHtml(formattedDate)}\n` +
+    `⏰ <b>Vaqt:</b> ${escapeTgHtml(vaqt)}\n\n` +
     `💵 <b>Naqd pul:</b> <code>${f(t.sofNaqd)} so'm</code>` +
     (t.ertalabkiSdacha > 0 ? ` <i>(${f(t.naqdSanalgan)} - ${f(t.ertalabkiSdacha)} sdacha)</i>` : '') + `\n` +
     `💳 <b>Terminal:</b> <code>${f(t.terminalJami)} so'm</code>\n` +
@@ -406,5 +434,5 @@ export function formatKassaYopishHtml(
     `🧾 <b>CHEKDAGI SUMMA:</b> <code>${f(t.chekdagiSumma)} so'm</code>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `${farqMatn}\n` +
-    (record.izoh ? `\n📌 <i>Izoh: ${record.izoh}</i>` : '');
+    (record.izoh ? `\n📌 <i>Izoh: ${escapeTgHtml(record.izoh)}</i>` : '');
 }

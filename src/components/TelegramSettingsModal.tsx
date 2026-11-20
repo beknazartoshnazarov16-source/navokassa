@@ -23,7 +23,8 @@ import {
   sendTelegramMiniAppInvite,
   resetTelegramBotMenu,
   fetchServerAppUrl,
-  checkMiniAppUrlReachability
+  checkMiniAppUrlReachability,
+  isPublicMiniAppUrl
 } from '../utils/telegram';
 
 interface TelegramSettingsModalProps {
@@ -87,16 +88,20 @@ export const TelegramSettingsModal: React.FC<TelegramSettingsModalProps> = ({
       setAutoSendOnTransaction(config.autoSendOnTransaction);
       setBotUsername(config.botUsername);
       const fallbackOrigin =
-        typeof window !== 'undefined' && window.location.origin.startsWith('https://')
+        typeof window !== 'undefined' && isPublicMiniAppUrl(window.location.origin)
           ? window.location.origin
           : '';
-      const initialUrl = config.miniAppUrl || fallbackOrigin;
+      const initialUrl =
+        config.miniAppUrl && isPublicMiniAppUrl(config.miniAppUrl)
+          ? config.miniAppUrl
+          : fallbackOrigin;
       setMiniAppUrl(initialUrl);
       if (initialUrl) {
         runUrlProbe(initialUrl);
       } else {
+        setUrlProbe({ checking: false });
         fetchServerAppUrl().then(url => {
-          if (url && url.startsWith('https://')) {
+          if (url && isPublicMiniAppUrl(url)) {
             setMiniAppUrl(prev => prev || url);
             runUrlProbe(url);
           }
@@ -577,7 +582,7 @@ export const TelegramSettingsModal: React.FC<TelegramSettingsModalProps> = ({
                 />
               </div>
 
-              {urlProbe.message && (
+              {urlProbe.message ? (
                 <div
                   className={`p-2.5 rounded-xl text-[11px] leading-relaxed border ${
                     urlProbe.reachable
@@ -586,15 +591,13 @@ export const TelegramSettingsModal: React.FC<TelegramSettingsModalProps> = ({
                   }`}
                 >
                   <p>{urlProbe.message}</p>
-                  {!urlProbe.reachable && (
-                    <div className="mt-2 pt-2 border-t border-rose-200 text-slate-800 space-y-1">
-                      <p className="font-bold text-rose-950">Telefonda 403 chiqmasligi uchun 4 ta qadam:</p>
-                      <p>1. <strong>Share</strong> emas, yuqori o&apos;ngdagi <strong>🚀 Deploy (Cloud Run)</strong> tugmasini bosing (<strong>Allow unauthenticated / Public</strong> qilib).</p>
-                      <p>2. Deploy tugagach chiqadigan <code>https://...run.app</code> (<code>ais-dev</code> va <code>ais-pre</code> bo&apos;lmagan) havolasini nusxalang.</p>
-                      <p>3. Shu katakka qo&apos;yib <strong>«Mini App&apos;ni Botga Ulash ⚡»</strong> tugmasini bosing.</p>
-                      <p>4. Agar avval <code>@BotFather</code> da <strong>Configure Mini App</strong> qo&apos;ygan bo&apos;lsangiz, o&apos;sha yerdagi havolani ham yangi <code>https://...run.app</code> ga almashtiring.</p>
-                    </div>
-                  )}
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-xl text-[11px] leading-relaxed border bg-amber-50 border-amber-200 text-amber-950 space-y-1">
+                  <p className="font-bold">Mini App’ni telefonda xatosiz ochish uchun:</p>
+                  <p>1. Yuqori o&apos;ngdagi <strong>🚀 Deploy (Cloud Run)</strong> tugmasini bosing (<strong>Allow unauthenticated / Public</strong> qilib).</p>
+                  <p>2. Deploy chiqargan <code>https://...run.app</code> (<code>ais-dev</code> / <code>ais-pre</code> bo&apos;lmagan) havolani bir marta ochsangiz o&apos;zi ulanadi, yoki shu yerga qo&apos;yib <strong>«Mini App&apos;ni Botga Ulash ⚡»</strong> ni bosing.</p>
+                  <p>3. Avval <code>@BotFather</code> da eski ssilka kiritgan bo&apos;lsangiz, <code>/mybots</code> → Bot Settings → Configure Mini App / Menu Button dan ham o&apos;sha eski ssilkani olib tashlang.</p>
                 </div>
               )}
 

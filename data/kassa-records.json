@@ -1,1 +1,24 @@
-[]
+[
+  {
+    "id": "2026-11-15__1-Kassa",
+    "date": "2026-11-15",
+    "kassaNomi": "1-Kassa",
+    "kassirIsmi": "beknazar",
+    "isOchiq": true,
+    "naqdPul": 4235000,
+    "ertalabkiSdacha": 0,
+    "terminalSumma": 2451877,
+    "terminalList": [],
+    "clickSumma": 545200,
+    "clickList": [],
+    "qarzList": [],
+    "firmaList": [],
+    "rasxodList": [],
+    "chekdagiSumma": 0,
+    "izoh": "",
+    "updatedAt": "2026-11-15T17:39:01.453Z",
+    "yopilganVaqt": "19:50",
+    "kassirId": "kassir-1794764251723",
+    "ochilganVaqt": "18:39"
+  }
+]
